@@ -162,37 +162,40 @@ class Game:
     # =========================
 
     def begin_turn(self, player: Player, going_back: bool) -> TurnResult:
-        """
-        Gère la phase de déplacement du tour d'un joueur.
-        Cette méthode :
-        - met à jour la direction (descendre / remonter),
-        - applique la consommation d'air liée aux trésors portés,
-        - lance les dés, applique la pénalité liée aux trésors,
-        - déplace le joueur sur le plateau.
-
-        Elle renvoie un TurnResult qui résume ce qui s'est passé et indique
-        si le joueur peut encore effectuer une action sur la case.
-
-        Remarque :
-        - Si le joueur a déjà has_returned = True, cette méthode ne devrait
-          normalement pas être appelée (on peut sinon lever une exception).
-        """
         if player.has_returned:
             raise RuntimeError("begin_turn appelé sur un joueur déjà revenu.")
 
-        # Mise à jour de la direction
-        if going_back:
+        # =========================
+        #  Règles de direction
+        # =========================
+        # - Si le joueur est déjà en train de remonter : il CONTINUE à remonter.
+        # - Sinon, au sous-marin en début de manche : obligation de descendre.
+        # - Sinon : on suit le choix `going_back` donné par l’UI / IA.
+
+        if player.going_back:
+            effective_going_back = True
+        else:
+            if player.is_on_submarine and not player.has_returned:
+                # Premier déplacement de la manche -> obligé de descendre
+                effective_going_back = False
+            else:
+                effective_going_back = going_back
+
+        # Applique la direction effective
+        if effective_going_back:
             player.start_going_back()
         else:
             player.continue_descending()
 
-        # Consommation d'air liée aux trésors portés
+        # =========================
+        #  Air & déplacement
+        # =========================
+
         air_before = self.air
         penalty = player.carrying_count
         self.air -= penalty
         air_after = self.air
 
-        # Lancer de dés
         dice_roll = self.dice.roll()
         move_distance = dice_roll - penalty
         if move_distance < 0:
@@ -217,6 +220,7 @@ class Game:
             reached_submarine=reached_submarine,
             can_act_on_space=can_act,
         )
+
 
     def _move_player(self, player: Player, moves: int) -> bool:
         """
@@ -302,9 +306,16 @@ class Game:
 
     def advance_to_next_player(self) -> None:
         """
-        Passe au joueur suivant (index cyclique).
+        Passe au joueur suivant qui n'est pas encore revenu.
+        Si tous les joueurs ont has_returned = True, on s'arrête simplement :
+        is_round_over() détectera la fin de manche.
         """
-        self.current_player_index = (self.current_player_index + 1) % len(self.players)
+        nb_players = len(self.players)
+        for _ in range(nb_players):
+            self.current_player_index = (self.current_player_index + 1) % nb_players
+            if not self.current_player.has_returned:
+                break
+
 
     # =========================
     #  Fin de manche / partie
