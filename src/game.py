@@ -222,47 +222,61 @@ class Game:
         )
 
 
+    
     def _move_player(self, player: Player, moves: int) -> bool:
         """
-        Déplace le joueur d'un certain nombre de cases dans la direction indiquée
-        par player.going_back.
+        Déplace le joueur en appliquant les règles Deep Sea Adventure :
 
-        Respecte :
-        - les limites du plateau,
-        - le retour au sous-marin en remontée.
-
-        Retour
-        ------
-        bool
-            True si le joueur a atteint le sous-marin pendant ce déplacement.
+        - moves = résultat des dés - nombre de trésors portés (déjà calculé dans begin_turn)
+        - si le joueur avance vers un jeton de ruine sur lequel se trouve déjà
+        un autre explorateur, on passe sur ce jeton sans le compter dans moves.
+        - en descente, on ne dépasse pas le dernier jeton du plateau.
+        - en remontée, si on atteint ou dépasse le sous-marin, le joueur revient.
         """
         if moves <= 0:
             return False
 
         direction = -1 if player.going_back else 1
         steps_left = moves
+        reached_submarine = False
 
         while steps_left > 0:
             next_pos = player.position + direction
 
-            # Descente : ne pas dépasser la dernière case
+            # --- Descente : ne pas dépasser le plateau ---
             if not player.going_back and next_pos > self.board.last_index:
+                # On s'arrête simplement au dernier jeton
+                player.move_to(self.board.last_index)
                 break
 
-            # Remontée : si on atteint ou dépasse le sous-marin
+            # --- Remontée : retour au sous-marin ---
             if player.going_back and next_pos <= self.board.submarine_index:
                 player.mark_as_returned()
-                return True
+                reached_submarine = True
+                break
 
+            # Regarder la case vers laquelle on va
+            space = self.board.get_space(next_pos)
+            occupied_by_other = any(
+                (other is not player) and (other.position == next_pos)
+                for other in self.players
+            )
+
+            # On se déplace quand même physiquement sur la case
             player.move_to(next_pos)
-            steps_left -= 1
 
-        # Si on a fini exactement sur le sous-marin en remontée
-        if player.going_back and player.is_on_submarine:
+            # Règle : "si vous avancez vers un jeton de ruine sur lequel se trouve
+            # déjà un autre explorateur, sautez par dessus ce jeton sans le compter"
+            # → on ne consomme PAS de pas dans ce cas.
+            if not (occupied_by_other and space.has_ruin):
+                steps_left -= 1
+
+        # Cas particulier : si on termine exactement au sous-marin en remontée
+        if player.going_back and player.is_on_submarine and not reached_submarine:
             player.mark_as_returned()
-            return True
+            reached_submarine = True
 
-        return False
+        return reached_submarine
 
     def perform_action(self, player: Player, action_code: str) -> Optional[RuinTile]:
         """

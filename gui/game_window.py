@@ -668,36 +668,48 @@ class GameWindow(QMainWindow):
                 "Choisis une direction et une action,\n"
                 "puis clique sur « Jouer le tour »."
             )
-
         # =========================
         #  Direction (UI)
         # =========================
-        if p.is_on_submarine and not p.has_returned:
-            # Début de manche : obligé de descendre
-            self.radio_descend.setEnabled(True)
-            self.radio_go_back.setEnabled(False)
+        if not p.is_ai:
+            # --- Joueur humain : on lui laisse le contrôle des radios ---
+            if p.is_on_submarine and not p.has_returned:
+                # Début de manche : obligé de descendre
+                self.radio_descend.setEnabled(True)
+                self.radio_go_back.setEnabled(False)
 
-            self.radio_descend.setChecked(True)
-            self.radio_go_back.setChecked(False)
-
-        elif p.going_back:
-            # Il a déjà décidé de remonter : on affiche "Remonter" verrouillé
-            self.radio_descend.setEnabled(False)
-            self.radio_go_back.setEnabled(False)
-
-            self.radio_descend.setChecked(False)
-            self.radio_go_back.setChecked(True)
-
-        else:
-            # En pleine descente : libre de choisir descendre / commencer à remonter
-            self.radio_descend.setEnabled(True)
-            self.radio_go_back.setEnabled(True)
-
-            # Par défaut on met "Descendre"
-            # (si le joueur vient de cliquer "Remonter", ce sera pris en compte
-            #  dans on_play_turn_clicked avant le prochain refresh)
-            if not self.radio_go_back.isChecked():
                 self.radio_descend.setChecked(True)
+                self.radio_go_back.setChecked(False)
+
+            elif p.going_back:
+                # Il a déjà décidé de remonter : on affiche "Remonter" verrouillé
+                self.radio_descend.setEnabled(False)
+                self.radio_go_back.setEnabled(False)
+
+                self.radio_descend.setChecked(False)
+                self.radio_go_back.setChecked(True)
+
+            else:
+                # En pleine descente : libre de choisir descendre / commencer à remonter
+                self.radio_descend.setEnabled(True)
+                self.radio_go_back.setEnabled(True)
+
+                # Par défaut on met "Descendre"
+                if not self.radio_go_back.isChecked():
+                    self.radio_descend.setChecked(True)
+        else:
+            # --- IA : les boutons restent désactivés, on met juste l'état visuel cohérent ---
+            self.radio_descend.setChecked(not p.going_back)
+            self.radio_go_back.setChecked(p.going_back)
+
+        # Action par défaut : ne rien faire
+        self.radio_action_none.setChecked(True)
+
+        # Désactiver le bouton si la manche ou la partie est finie
+        self.button_play_turn.setEnabled(
+            not self.game.is_round_over() and not self.game.is_game_over()
+        )
+
 
     # =========================
     #  Logique "un tour"
@@ -715,24 +727,24 @@ class GameWindow(QMainWindow):
         player = self.game.current_player
 
         # --- Décision de direction ---
-                # --- Décision de direction ---
         if player.is_ai:
+            # 👉 L’IA décide complètement seule
             assert isinstance(player, AIPlayer)
             go_back = player.choose_direction(self.game.air)
         else:
+            # Humain
             if player.going_back:
-                # Il est déjà en remontée, il continue.
+                # Déjà en remontée, il continue à remonter
                 go_back = True
             elif player.is_on_submarine and not player.has_returned:
-                # Début de manche : sur le sous-marin, obligé de descendre.
+                # Début de manche : obligé de descendre
                 go_back = False
             else:
-                # En descente, peut choisir de commencer à remonter.
+                # En descente, peut choisir de commencer à remonter
                 go_back = self.radio_go_back.isChecked()
 
         # --- Phase de déplacement ---
         result = self.game.begin_turn(player, going_back=go_back)
-        # Petite animation de dé avec la valeur tirée
         self.show_dice_animation(result.dice_roll)
 
         # --- Action sur la case ---
@@ -762,13 +774,9 @@ class GameWindow(QMainWindow):
             msg = "\n".join(f"{name}: {score}" for name, score in scores.items())
             QMessageBox.information(self, "Fin de manche", msg)
             self.game.next_round()
-
-            
         else:
-            # Joueur suivant
             self.game.advance_to_next_player()
 
-        # Refresh après toutes les modifications
         self._refresh_ui()
 
     def _init_dice_animation(self):

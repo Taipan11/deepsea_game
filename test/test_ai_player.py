@@ -1,5 +1,5 @@
 # tests/test_ai_player.py
-from ai_player import AIPlayer
+from src.ai_player import AIPlayer
 from src.ruin_tile import RuinTile
 from src.space import Space
 
