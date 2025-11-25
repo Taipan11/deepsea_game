@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from enum import Enum, auto
 
 from .board import Board
 from .dice import Dice
@@ -56,6 +57,50 @@ class TurnResult:
     reached_submarine: bool
     can_act_on_space: bool
 
+class GamePhase(Enum):
+    SETUP = auto()
+    PLAYING = auto()
+    ROUND_END = auto()
+    GAME_END = auto()
+
+
+@dataclass
+class PlayerState:
+    index: int
+    name: str
+    is_ai: bool
+    position: int
+    is_on_submarine: bool
+    going_back: bool
+    has_returned: bool
+    carrying_count: int
+    carrying_value: int
+    total_score: int
+
+@dataclass
+class SpaceState:
+    index: int
+    depth: int           # ou niveau, si tu as cette info
+    has_ruin: bool       # True si au moins 1 tuile (initiale ou reposée)
+    ruin_count: int
+    is_submarine: bool
+    is_removed: bool     # si plus tard tu “retires” des cases
+
+@dataclass
+class GameState:
+    phase: GamePhase
+    round_number: int
+    num_rounds: int
+    air: int
+    air_per_round: int
+    current_player_index: int
+    is_last_round: bool
+    is_round_over: bool
+    is_game_over: bool
+    board: Dict[str, Any]
+    players: List[PlayerState]
+    last_turn: Optional[TurnResult] = None
+
 
 class Game:
     """
@@ -72,7 +117,6 @@ class Game:
 
     Elle n'envoie pas de prints, ne lit pas de input.
     """
-
     def __init__(
         self,
         players: List[Player],
@@ -88,20 +132,31 @@ class Game:
             raise ValueError("num_rounds doit être >= 1.")
         if air_per_round <= 0:
             raise ValueError("air_per_round doit être >= 1.")
-
-        self.players: List[Player] = players
-        self.num_rounds: int = num_rounds
-        self.air_per_round: int = air_per_round
-
-        self.board: Board = board if board is not None else Board.create_default()
-        self.dice: Dice = dice if dice is not None else Dice()
+        self.players = players
+        self.num_rounds = num_rounds
+        self.air_per_round = air_per_round
+        self.board = board if board is not None else Board.create_default()
+        self.dice = dice if dice is not None else Dice()
 
         self.round_number: int = 1
         self.air: int = air_per_round
         self.current_player_index: int = 0
 
-        # On prépare la première manche
+        # Nouveau : phase + dernier tour pour le state
+        self._phase: GamePhase = GamePhase.SETUP
+        self._last_turn: Optional[TurnResult] = None
+
         self._reset_all_players_for_new_game()
+        # Après init, on est prêt à jouer
+        self._phase = GamePhase.PLAYING
+        # Suivre quelles cases ont été vidées pendant la manche
+        self._emptied_spaces_this_round: set[int] = set()
+        # Suivre l'ordre dans lequel les joueurs reviennent au sous-marin
+        self._return_log: list[int] = []          # indices de joueurs dans l'ordre de retour
+        self._next_round_start_index: int = 0     # qui commencera la prochaine manche
+
+
+
 
     # =========================
     #  Initialisation / reset
@@ -116,16 +171,34 @@ class Game:
 
     def start_new_round(self) -> None:
         """
-        Prépare et démarre une nouvelle manche :
-        - recrée un plateau,
-        - réinitialise l'air,
-        - remet tous les joueurs au sous-marin.
+        Prépare une nouvelle manche :
+
+        - On NE recrée PAS le board (il a été compressé en fin de manche).
+        - On remet juste l'air et les joueurs à zéro pour la nouvelle plongée.
+        - Le joueur qui commence est déterminé par la règle de fin de manche.
         """
-        self.board = Board.create_default()
         self.air = self.air_per_round
+        self._emptied_spaces_this_round.clear()
+        self._return_log.clear()          # on réinitialise l'historique de retour
+
         for p in self.players:
             p.reset_for_new_round()
-        self.current_player_index = 0
+
+        # 👉 Qui commence la nouvelle manche ?
+        self.current_player_index = self._next_round_start_index
+
+        self._phase = GamePhase.PLAYING
+
+
+     
+    def _register_player_return(self, player: Player) -> None:
+        """
+        Enregistre qu'un joueur vient de revenir au sous-marin
+        (pour déterminer qui commencera la prochaine manche).
+        """
+        idx = self.players.index(player)
+        if idx not in self._return_log:
+            self._return_log.append(idx)
 
     # =========================
     #  Propriétés d'état
@@ -222,7 +295,6 @@ class Game:
         )
 
 
-    
     def _move_player(self, player: Player, moves: int) -> bool:
         """
         Déplace le joueur en appliquant les règles Deep Sea Adventure :
@@ -252,71 +324,76 @@ class Game:
             # --- Remontée : retour au sous-marin ---
             if player.going_back and next_pos <= self.board.submarine_index:
                 player.mark_as_returned()
+                self._register_player_return(player)   # NEW
                 reached_submarine = True
                 break
 
+
             # Regarder la case vers laquelle on va
             space = self.board.get_space(next_pos)
-            occupied_by_other = any(
-                (other is not player) and (other.position == next_pos)
-                for other in self.players
-            )
 
-            # On se déplace quand même physiquement sur la case
+            # On se déplace physiquement sur la case
             player.move_to(next_pos)
 
-            # Règle : "si vous avancez vers un jeton de ruine sur lequel se trouve
-            # déjà un autre explorateur, sautez par dessus ce jeton sans le compter"
-            # → on ne consomme PAS de pas dans ce cas.
-            if not (occupied_by_other and space.has_ruin):
+            # On regarde si cette case doit être "sautée" ou pas
+            if not self._should_skip_space(player, next_pos, space):
                 steps_left -= 1
+
 
         # Cas particulier : si on termine exactement au sous-marin en remontée
         if player.going_back and player.is_on_submarine and not reached_submarine:
             player.mark_as_returned()
+            self._register_player_return(player)   # NEW
             reached_submarine = True
+
 
         return reached_submarine
 
     def perform_action(self, player: Player, action_code: str) -> Optional[RuinTile]:
-        """
-        Applique une action du joueur sur la case courante.
-
-        Paramètres
-        ----------
-        player : Player
-            Joueur dont c'est le tour, déjà déplacé par begin_turn().
-        action_code : str
-            Code d'action :
-            - "A" : ne rien faire
-            - "B" : ramasser un jeton de ruines (si disponible)
-            (plus tard : "C" pour poser un trésor, etc.)
-
-        Retour
-        ------
-        Optional[RuinTile]
-            Le jeton ramassé si l'action B a réussi, sinon None.
-        """
         if player.is_on_submarine:
-            # Au sous-marin, il n'y a pas d'action de fouille.
             return None
 
         space: Space = self.board.get_space(player.position)
-
         code = action_code.upper().strip()
+
         if code == "A":
             return None
 
         if code == "B":
             if not space.has_ruin:
                 return None
+
             tile = space.pop_ruin()
             if tile is not None:
                 player.take_ruin(tile)
+
+                # Si la case n'a plus de ruine, on la marque comme "vidée" pour fin de manche
+                if not space.has_ruin:
+                    self._emptied_spaces_this_round.add(player.position)
+
+            return tile
+        
+        if code == "C":
+        # Poser un trésor pour alléger sa charge
+
+            # 1. Impossible si la case contient déjà des ruines
+            if space.has_ruin:
+                return None
+
+            # 2. Impossible si le joueur ne porte rien
+            tile = player.drop_one_ruin()
+            if tile is None:
+                return None
+
+            # 3. On pose la tuile sur cette case
+            space.push_ruin(tile)
+
+            # 4. Cette case n'est plus "vidée" pour la fin de manche
+            self._emptied_spaces_this_round.discard(player.position)
             return tile
 
-        # Actions futures (C, D, ...) pourront être gérées ici
         return None
+
 
     def advance_to_next_player(self) -> None:
         """
@@ -334,30 +411,72 @@ class Game:
     # =========================
     #  Fin de manche / partie
     # =========================
-
     def end_round(self) -> None:
         """
         Applique la fin de manche :
 
-        - Les joueurs revenus au sous-marin sécurisent leurs trésors portés.
-        - Les autres perdent tous leurs trésors portés.
+        - Si la manche se termine par manque d'air (air <= 0) :
+            * les joueurs au sous-marin sécurisent leurs trésors,
+            * les autres jettent tous leurs trésors au fond,
+            empilés par lots de 3, en commençant par le joueur
+            le plus éloigné du sous-marin.
+        - Sinon (tout le monde est revenu avec encore de l'air) :
+            * les joueurs au sous-marin sécurisent leurs trésors,
+            * les autres perdent leurs trésors (version simplifiée).
+        - Dans tous les cas, on compresse ensuite le chemin.
         """
-        for p in self.players:
-            if p.is_on_submarine:
-                p.secure_carried_treasures()
-            else:
-                p.drop_all_carrying()
+        exhausted_by_air = self.air <= 0
 
-        # Hook pour éventuellement compresser le chemin entre les manches
+        # Liste des tuiles qui tombent au fond (si air épuisé)
+        dropped_to_bottom: list[RuinTile] = []
+
+        if exhausted_by_air:
+            # On traite les joueurs du plus éloigné au plus proche du sous-marin
+            players_ordered = sorted(
+                self.players,
+                key=lambda p: p.position,
+                reverse=True
+            )
+
+            for p in players_ordered:
+                if p.is_on_submarine:
+                    # Il a réussi à rentrer malgré l'air à 0 → il sécurise
+                    p.secure_carried_treasures()
+                    continue
+
+                # Joueur resté en mer : il jette tous ses trésors au fond
+                while p.carrying:
+                    tile = p.drop_one_ruin()
+                    if tile is not None:
+                        dropped_to_bottom.append(tile)
+        else:
+            # Fin de manche "normale" : comportement précédent
+            for p in self.players:
+                if p.is_on_submarine:
+                    p.secure_carried_treasures()
+                else:
+                    p.drop_all_carrying()
+
+        # Si l'air a été épuisé et qu'il y a des trésors à jeter,
+        # on les ajoute au fond par piles de 3.
+        if exhausted_by_air and dropped_to_bottom:
+            self.board.drop_tiles_to_bottom(dropped_to_bottom, stack_size=3)
+
+        # ⚠️ AVANT de reset pour la nouvelle manche, on décide qui commencera
+        self._next_round_start_index = self._compute_next_round_start_index()
+        
+        # Compression du chemin : on retire les cases vides
         self.board.compress_path()
+        self._phase = GamePhase.ROUND_END
+
 
     def next_round(self) -> None:
-        """
-        Passe à la manche suivante, si possible.
-        """
         self.round_number += 1
-        if not self.is_game_over():
+        if self.is_game_over():
+            self._phase = GamePhase.GAME_END
+        else:
             self.start_new_round()
+
 
     # =========================
     #  Scores / infos
@@ -396,6 +515,95 @@ class Game:
         """
         return [str(p) for p in self.players]
 
+
+    # =========================
+    #  State global lisible par l’UI
+    # =========================
+
+    def get_state(self) -> GameState:
+        players_state: List[PlayerState] = []
+        for idx, p in enumerate(self.players):
+            carrying_value = sum(tile.value for tile in p.carrying)
+            players_state.append(
+                PlayerState(
+                    index=idx,
+                    name=p.name,
+                    is_ai=p.is_ai,
+                    position=p.position,
+                    is_on_submarine=p.is_on_submarine,
+                    going_back=p.going_back,
+                    has_returned=p.has_returned,
+                    carrying_count=len(p.carrying),
+                    carrying_value=carrying_value,
+                    total_score=p.total_score,
+                )
+            )
+
+        # Vue des cases
+        spaces_state: List[SpaceState] = []
+        for idx, space in enumerate(self.board.spaces):
+            spaces_state.append(
+                SpaceState(
+                    index=idx,
+                    depth=getattr(space, "depth", 0),
+                    has_ruin=space.has_ruin,
+                    ruin_count=space.ruin_count if hasattr(space, "ruin_count") else (1 if space.has_ruin else 0),
+                    is_submarine=(idx == self.board.submarine_index),
+                    is_removed=getattr(space, "is_removed", False),
+                )
+            )
+
+        return GameState(
+            phase=self._phase,
+            round_number=self.round_number,
+            num_rounds=self.num_rounds,
+            air=self.air,
+            air_per_round=self.air_per_round,
+            current_player_index=self.current_player_index,
+            is_last_round=self.is_last_round,
+            is_round_over=self.is_round_over(),
+            is_game_over=self.is_game_over(),
+            board=self.board.to_dict(),
+            spaces=spaces_state,          # 👈 NEW
+            players=players_state,
+            last_turn=self._last_turn,
+        )
+
+    def _compute_next_round_start_index(self) -> int:
+        """
+        Détermine quel joueur commencera la prochaine manche selon la règle :
+
+        - Si tous les joueurs sont au sous-marin :
+            -> dernier à être rentré (via _return_log).
+        - Si aucun n'est au sous-marin :
+            -> joueur le plus éloigné du sous-marin (position max).
+        - Si certains sont au sous-marin et d'autres non :
+            -> parmi ceux qui ne sont pas revenus, celui le plus loin.
+        """
+        on_sub = [(i, p) for i, p in enumerate(self.players) if p.is_on_submarine]
+        not_on_sub = [(i, p) for i, p in enumerate(self.players) if not p.is_on_submarine]
+
+        if on_sub and not not_on_sub:
+            # Cas 1 : tout le monde est revenu -> dernier à être rentré
+            for idx in reversed(self._return_log):
+                if 0 <= idx < len(self.players):
+                    return idx
+            # fallback (au cas où) :
+            return 0
+
+        if not on_sub and not_on_sub:
+            # Cas 2 : personne n'est revenu -> plus loin du sous-marin
+            farthest_i, _ = max(not_on_sub, key=lambda t: t[1].position)
+            return farthest_i
+
+        if on_sub and not_on_sub:
+            # Cas 3 : certains revenus, d'autres non -> parmi ceux non revenus, le plus loin
+            farthest_i, _ = max(not_on_sub, key=lambda t: t[1].position)
+            return farthest_i
+
+        # Cas bizarre / fallback
+        return 0
+
     # =========================
     #  Sérialisation
     # =========================
@@ -413,6 +621,40 @@ class Game:
             "board": self.board.to_dict(),
             "players": [p.to_dict() for p in self.players],
         }
+    
+    
+    def _is_space_occupied_by_other(self, player: Player, position: int) -> bool:
+        return any(
+            (other is not player) and (other.position == position)
+            for other in self.players
+        )
+
+    def _should_skip_space(self, player: Player, position: int, space: Space) -> bool:
+        """
+        Décide si cette case doit être "sautée" sans consommer de pas.
+
+        Idée : c’est ici qu’on branche les règles évolutives :
+        - case occupée par un autre joueur
+        - case marquée comme retirée
+        - future règle spéciale (piège, courant marin, etc.)
+        """
+        occupied_by_other = self._is_space_occupied_by_other(player, position)
+
+        # Règle 1 : sauter toute case occupée par un autre joueur
+        if occupied_by_other:
+            return True
+
+        # Règle 2 (exemple futur) : si on marque certaines cases comme "retirées"
+        # if getattr(space, "is_removed", False):
+        #     return True
+
+        # Règle 3 : on pourrait garder un comportement spécial sur les ruines
+        # (par exemple : sauter seulement si c’est une ruine occupée, comme la règle originale)
+        # if occupied_by_other and space.has_ruin:
+        #     return True
+
+        return False
+
 
     @classmethod
     def from_dict(
@@ -464,3 +706,5 @@ class Game:
         game.board = Board.from_dict(data.get("board", {}))
 
         return game
+
+

@@ -95,6 +95,13 @@ class Space:
 
         self.ruins.append(tile)
 
+    def push_ruin(self, tile: RuinTile) -> None:
+        """
+        Pose un trésor sur cette case.
+        Dans DSA, on le pose face cachée, mais côté moteur on s’en fiche.
+        """
+        self.ruins.append(tile)
+
     def pop_ruin(self) -> Optional[RuinTile]:
         """
         Retire et renvoie le jeton de ruines au sommet de la pile.

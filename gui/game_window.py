@@ -17,11 +17,11 @@ from PySide6.QtWidgets import (
     QSplitter,
     QFrame,
     QSizePolicy,
-    QLineEdit
+    QLineEdit,
+    QGraphicsOpacityEffect,
 )
-from PySide6.QtCore import Qt
-from src.player import Player
-
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from typing import Optional, List
 
 # Rendre src importable (comme dans cli_game.py)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,9 +32,6 @@ from src.game import Game
 from src.player import Player
 from src.ai_player import AIPlayer
 from .board_widget import BoardWidget
-from PySide6.QtWidgets import QGraphicsOpacityEffect
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve
-from typing import Optional, List
 
 
 class SetupWindow(QMainWindow):
@@ -236,13 +233,14 @@ class GameWindow(QMainWindow):
                 AIPlayer(name="Bot"),
             ]
 
+        # Le Game est l’unique source de vérité du state
         self.game = Game(players, num_rounds=3, air_per_round=25)
         self.board_widget = BoardWidget(self.game.board, self.game.players)
 
         # --- UI ---
         self._build_ui()
         self._apply_styles()
-        self._init_dice_animation()  # si tu as déjà ajouté l’animation
+        self._init_dice_animation()
         self._refresh_ui()
 
     # =========================
@@ -316,7 +314,7 @@ class GameWindow(QMainWindow):
         # On stocke une petite "carte" par joueur (index -> dict de labels)
         self.player_cards = []  # liste alignée sur self.game.players
 
-        for idx, player in enumerate(self.game.players):
+        for idx, _player in enumerate(self.game.players):
             card = QFrame()
             card.setObjectName("PlayerCard")
             card_layout = QVBoxLayout()
@@ -359,10 +357,9 @@ class GameWindow(QMainWindow):
                 "treasure": treasure_label,
             })
 
-
         players_layout.addStretch()
         left_layout.addWidget(players_group, stretch=2)
-        
+
         # --- Colonne droite : panneau d'actions ---
         right_panel = QWidget()
         right_layout = QVBoxLayout()
@@ -391,7 +388,6 @@ class GameWindow(QMainWindow):
 
         right_layout.addWidget(current_player_group)
 
-
         # GroupBox direction
         direction_groupbox = QGroupBox("Direction du déplacement")
         direction_layout = QVBoxLayout()
@@ -416,13 +412,16 @@ class GameWindow(QMainWindow):
 
         self.radio_action_none = QRadioButton("Ne rien faire (A)")
         self.radio_action_pick = QRadioButton("Ramasser un trésor (B)")
+        self.radio_action_drop = QRadioButton("Poser un trésor (C)")  # NEW
 
         self.action_group = QButtonGroup()
         self.action_group.addButton(self.radio_action_none)
         self.action_group.addButton(self.radio_action_pick)
+        self.action_group.addButton(self.radio_action_drop)  # NEW
 
         action_layout.addWidget(self.radio_action_none)
         action_layout.addWidget(self.radio_action_pick)
+        action_layout.addWidget(self.radio_action_drop)  # NEW
 
         right_layout.addWidget(action_groupbox)
 
@@ -444,8 +443,10 @@ class GameWindow(QMainWindow):
         main_layout.addWidget(splitter, stretch=1)
 
         # ---------- FOOTER (petites infos) ----------
-        footer = QLabel("Astuce : plus tu descends, plus les trésors sont précieux… "
-                        "mais attention à l’air restant ! 💨")
+        footer = QLabel(
+            "Astuce : plus tu descends, plus les trésors sont précieux… "
+            "mais attention à l’air restant ! 💨"
+        )
         footer.setObjectName("FooterLabel")
         footer.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         main_layout.addWidget(footer)
@@ -568,7 +569,7 @@ class GameWindow(QMainWindow):
                 color: #d1d5db;
             }
             QLabel#DiceLabel {
-                background-color: rgba(15, 23, 42, 220); /* fond bleu nuit semi-transparent */
+                background-color: rgba(15, 23, 42, 220);
                 border-radius: 14px;
                 border: 1px solid #38bdf8;
                 padding: 12px 20px;
@@ -583,6 +584,7 @@ class GameWindow(QMainWindow):
     # =========================
 
     def _refresh_ui(self):
+        """Ne fait que lire l’état du moteur de jeu et mettre l’UI à jour."""
         # Infos de manche
         self.label_round.setText(f"Manche : {self.game.round_number}/{self.game.num_rounds}")
         self.label_air.setText(f"Air : {self.game.air}")
@@ -651,11 +653,12 @@ class GameWindow(QMainWindow):
             self.radio_go_back.setEnabled(False)
             self.radio_action_none.setEnabled(False)
             self.radio_action_pick.setEnabled(False)
-            self.button_play_turn.setEnabled(True)  # tu cliques juste pour le faire jouer
+            self.radio_action_drop.setEnabled(False)  # NEW
+            self.button_play_turn.setEnabled(True)  # on clique juste pour le faire jouer
 
             self.hint_label.setText(
                 "Tour du bot 🤖\n"
-                "Il choisit lui-même sa direction et s'il ramasse un trésor."
+                "Il choisit lui-même sa direction et s'il ramasse ou pose un trésor."
             )
         else:
             # Joueur humain : il contrôle direction + action
@@ -664,17 +667,21 @@ class GameWindow(QMainWindow):
             self.radio_action_none.setEnabled(True)
             self.radio_action_pick.setEnabled(True)
 
+            # On n'autorise le bouton “poser” que s’il porte au moins un trésor
+            self.radio_action_drop.setEnabled(len(p.carrying) > 0)  # NEW
+
             self.hint_label.setText(
                 "Choisis une direction et une action,\n"
                 "puis clique sur « Jouer le tour »."
             )
+
         # =========================
-        #  Direction (UI)
+        #  Direction (UI) – lecture de l’état du moteur
         # =========================
         if not p.is_ai:
-            # --- Joueur humain : on lui laisse le contrôle des radios ---
             if p.is_on_submarine and not p.has_returned:
-                # Début de manche : obligé de descendre
+                # Début de manche : obligé de descendre (logique métier dans Game.begin_turn,
+                # mais on reflète visuellement ici)
                 self.radio_descend.setEnabled(True)
                 self.radio_go_back.setEnabled(False)
 
@@ -690,32 +697,33 @@ class GameWindow(QMainWindow):
                 self.radio_go_back.setChecked(True)
 
             else:
-                # En pleine descente : libre de choisir descendre / commencer à remonter
+                # En pleine descente : choix libre visuellement
                 self.radio_descend.setEnabled(True)
                 self.radio_go_back.setEnabled(True)
 
-                # Par défaut on met "Descendre"
                 if not self.radio_go_back.isChecked():
                     self.radio_descend.setChecked(True)
         else:
-            # --- IA : les boutons restent désactivés, on met juste l'état visuel cohérent ---
+            # IA : on met juste l'état visuel cohérent
             self.radio_descend.setChecked(not p.going_back)
             self.radio_go_back.setChecked(p.going_back)
 
         # Action par défaut : ne rien faire
         self.radio_action_none.setChecked(True)
+        self.radio_action_pick.setChecked(False)
+        self.radio_action_drop.setChecked(False)
 
         # Désactiver le bouton si la manche ou la partie est finie
         self.button_play_turn.setEnabled(
             not self.game.is_round_over() and not self.game.is_game_over()
         )
 
-
     # =========================
     #  Logique "un tour"
     # =========================
 
     def on_play_turn_clicked(self):
+        """Ne fait qu’orchestrer les appels au moteur de jeu + feedback visuel."""
         if self.game.is_game_over():
             QMessageBox.information(self, "Partie terminée", "La partie est déjà terminée.")
             return
@@ -728,13 +736,13 @@ class GameWindow(QMainWindow):
 
         # --- Décision de direction ---
         if player.is_ai:
-            # 👉 L’IA décide complètement seule
+            # L’IA décide complètement seule via ses propres méthodes
             assert isinstance(player, AIPlayer)
             go_back = player.choose_direction(self.game.air)
         else:
-            # Humain
+            # Joueur humain : l’UI traduit seulement ses choix en booléen
             if player.going_back:
-                # Déjà en remontée, il continue à remonter
+                # Déjà en remontée, il continue à remonter (règle métier dans Game.begin_turn)
                 go_back = True
             elif player.is_on_submarine and not player.has_returned:
                 # Début de manche : obligé de descendre
@@ -747,7 +755,7 @@ class GameWindow(QMainWindow):
         result = self.game.begin_turn(player, going_back=go_back)
         self.show_dice_animation(result.dice_roll)
 
-        # --- Action sur la case ---
+               # --- Action sur la case ---
         if result.can_act_on_space:
             if player.is_ai:
                 assert isinstance(player, AIPlayer)
@@ -756,16 +764,40 @@ class GameWindow(QMainWindow):
             else:
                 if self.radio_action_pick.isChecked():
                     action_code = "B"
+                elif self.radio_action_drop.isChecked():
+                    action_code = "C"
                 else:
                     action_code = "A"
 
+                # ✅ Vérification spéciale pour C : case déjà occupée
+                if action_code == "C":
+                    space = self.game.board.get_space(player.position)
+                    if space.has_ruin:
+                        QMessageBox.warning(
+                            self,
+                            "Action impossible",
+                            "Impossible de poser un trésor sur une case qui contient déjà des ruines."
+                        )
+                        # On annule l’action (équivalent à "ne rien faire")
+                        action_code = "A"
+
             tile = self.game.perform_action(player, action_code)
-            if tile and not player.is_ai:
-                QMessageBox.information(
-                    self,
-                    "Trésor ramassé",
-                    f"Vous avez ramassé un trésor (valeur cachée : {tile.value}).",
-                )
+
+            # Feedback uniquement UI, la logique est dans Game / Player / Space
+            if not player.is_ai and tile:
+                if action_code == "B":
+                    QMessageBox.information(
+                        self,
+                        "Trésor ramassé",
+                        f"Vous avez ramassé un trésor (valeur cachée : {tile.value}).",
+                    )
+                elif action_code == "C":
+                    QMessageBox.information(
+                        self,
+                        "Trésor posé",
+                        "Vous avez posé un trésor sur cette case pour vous alléger."
+                    )
+
 
         # --- Fin de manche ? ---
         if self.game.is_round_over():
@@ -779,6 +811,10 @@ class GameWindow(QMainWindow):
 
         self._refresh_ui()
 
+    # =========================
+    #  Animation du dé
+    # =========================
+
     def _init_dice_animation(self):
         # Label centré qui affichera le résultat du dé (ex : "🎲 4")
         self.dice_label = QLabel(self)
@@ -791,7 +827,11 @@ class GameWindow(QMainWindow):
         self.dice_label.setGraphicsEffect(self.dice_opacity_effect)
 
         # Animation d'opacité (fade in/out)
-        self.dice_opacity_anim = QPropertyAnimation(self.dice_opacity_effect, b"opacity", self)
+        self.dice_opacity_anim = QPropertyAnimation(
+            self.dice_opacity_effect,
+            b"opacity",
+            self
+        )
         self.dice_opacity_anim.setDuration(800)  # 0.8s
         self.dice_opacity_anim.setStartValue(0.0)
         self.dice_opacity_anim.setKeyValueAt(0.2, 1.0)  # monte vite à 1
@@ -822,4 +862,3 @@ if __name__ == "__main__":
     setup = SetupWindow()
     setup.show()
     sys.exit(app.exec())
-

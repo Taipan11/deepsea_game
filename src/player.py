@@ -177,6 +177,14 @@ class Player:
         self.score_tiles.extend(self.carrying)
         self.carrying.clear()
 
+    def drop_one_ruin(self) -> Optional[RuinTile]:
+        """
+        Pose un de ses trésors (le dernier par ex.)
+        Retourne la tuile posée ou None s'il n’en porte plus.
+        """
+        if not self.carrying:
+            return None
+        return self.carrying.pop()
     # =========================
     #  Représentation
     # =========================

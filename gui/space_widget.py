@@ -36,7 +36,9 @@ class SpaceWidget(QLabel):
 
             # Si plusieurs ruines empilées, tu peux l’indiquer :
             if self.space.ruin_count > 1:
-                text += f"\n({self.space.ruin_count}x)"
+                # Affiche toutes les valeurs dans l'ordre (debug)
+                values = [tile.value for tile in self.space.ruins]  # FULL STACK
+                text += f"\n{values}"
 
         # Case vide
         else:

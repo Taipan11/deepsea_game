@@ -51,34 +51,35 @@ class Board:
         """
         Crée un plateau par défaut avec la distribution standard des jetons.
 
-        Paramètres
-        ----------
-        max_stack_size : Optional[int]
-            Limite de jetons par case (None = illimité).
-            Tu pourras par exemple mettre 3 pour activer la règle des piles de 3 plus tard.
-        shuffle_tiles : bool
-            Si True, mélange les jetons avant de les placer.
-        rng : Optional[random.Random]
-            Générateur pseudo-aléatoire à utiliser (pour tests reproductibles).
-            Si None, on utilise le module random global.
-
-        Retour
-        ------
-        Board
-            Un nouveau plateau initialisé.
+        - Si shuffle_tiles=True, on mélange l’ordre des tuiles
+        *à l’intérieur de chaque niveau* (profondeur),
+        mais on garde l’ordre 1 → 2 → 3 → 4.
         """
         if rng is None:
             rng = random
 
-        tiles = cls._create_default_tiles()
+        tiles = cls._create_default_tiles()  # déjà triées par niveau
+
         if shuffle_tiles:
-            rng.shuffle(tiles)
+            # Mélange à l'intérieur de chaque niveau, sans mélanger les niveaux entre eux
+            from collections import defaultdict
+
+            buckets: dict[int, List[RuinTile]] = defaultdict(list)
+            for tile in tiles:
+                buckets[tile.level].append(tile)
+
+            shuffled_tiles: List[RuinTile] = []
+            for level in (1, 2, 3, 4):
+                level_tiles = buckets[level]
+                rng.shuffle(level_tiles)   # mélange dans la zone de profondeur
+                shuffled_tiles.extend(level_tiles)
+
+            tiles = shuffled_tiles
 
         # Case 0 : sous-marin
         spaces: List[Space] = [Space(is_submarine=True)]
 
-        # Une case par tuile (version simple) :
-        # plus tard tu pourras changer la distribution si tu veux regrouper des piles.
+        # Une case par tuile (version simple)
         for tile in tiles:
             space = Space(is_submarine=False, max_stack_size=max_stack_size)
             space.add_ruin(tile)
@@ -86,35 +87,43 @@ class Board:
 
         return cls(spaces=spaces)
 
+
     @staticmethod
     def _create_default_tiles() -> List[RuinTile]:
         """
-        Crée la liste complète des RuinTile selon la distribution standard.
+        Crée la liste complète des RuinTile selon la distribution officielle
+        de Deep Sea Adventure, en respectant la profondeur :
 
-        Pour l’instant on prend un modèle simplifié :
-        - Niveau 1 : valeurs 0 à 3 (x2 de chaque)
-        - Niveau 2 : valeurs 4 à 7 (x2 de chaque)
-        - Niveau 3 : valeurs 8 à 11 (x2 de chaque)
-        - Niveau 4 : valeurs 12 à 15 (x2 de chaque)
+        - Les tuiles de niveau 1 (0–3) sont au début de la liste.
+        - Puis niveau 2 (4–7).
+        - Puis niveau 3 (8–11).
+        - Puis niveau 4 (12–15).
 
-        Si tu veux coller exactement aux règles, tu pourras ajuster cette méthode
-        sans toucher au reste du code.
+        À l'intérieur d'un même niveau, l'ordre est mélangé, mais
+        on ne mélange jamais les niveaux entre eux.
         """
         tiles: List[RuinTile] = []
 
-        distributions = [
-            (1, 0, 3),
-            (2, 4, 7),
-            (3, 8, 11),
-            (4, 12, 15),
-        ]
+        # Distribution officielle (36 tuiles au total)
+        level_values = {
+            1: [0,0, 1,1, 2,2, 3,3],        # 12 tuiles
+            2: [4,4, 5,5, 6,6, 7,7 ],        # 12 tuiles
+            3: [8,8, 9,9, 10,10, 11,11],            # 8 tuiles
+            4: [12, 12, 13, 13, 14, 14, 15, 15],                    # 4 tuiles
+        }
 
-        for level, start_val, end_val in distributions:
-            for value in range(start_val, end_val + 1):
-                tiles.append(RuinTile(level=level, value=value))
+        # On mélange l'ordre à l'intérieur de chaque niveau,
+        # mais on conserve strictement l'ordre des niveaux.
+        for level in (1, 2, 3, 4):
+            values = level_values[level][:]
+            random.shuffle(values)  # mélange *dans* la zone de profondeur
+
+            for value in values:
                 tiles.append(RuinTile(level=level, value=value))
 
         return tiles
+
+
 
     # ========================
     #  Propriétés utilitaires
@@ -230,14 +239,58 @@ class Board:
 
     def compress_path(self) -> None:
         """
-        (Hook pour plus tard) :
-        Implémenter ici la règle de compression du chemin entre les manches.
+        Compresse le chemin en fin de manche en retirant toutes les cases vides.
 
-        Idée possible :
-        - retirer les cases vides au-delà de la dernière ruine,
-        - ou rapprocher certaines piles, etc.
+        Règle :
+        - On conserve toujours la case du sous-marin (index 0).
+        - On retire toutes les autres cases qui ne contiennent aucune ruine.
+        - On conserve l'ordre des cases restantes.
 
-        Pour l’instant, cette méthode ne fait rien.
+        Les joueurs seront replacés au sous-marin en début de manche suivante.
         """
-        # TODO: implémenter la compression du chemin selon les règles complètes
-        pass
+        # On suppose que le sous-marin est toujours la case 0
+        submarine_space = self.spaces[0]
+
+        new_spaces: list[Space] = [submarine_space]
+
+        # On garde uniquement les cases non vides (hors sous-marin)
+        for idx, space in enumerate(self.spaces):
+            if idx == 0:
+                continue
+            if space.has_ruin:
+                new_spaces.append(space)
+
+        # Remplacement du chemin compressé
+        self.spaces = new_spaces
+
+        # Aucun besoin de toucher à submarine_index car il est déjà constant (0)
+        # Aucun setter → on n'y touche pas !
+
+    def drop_tiles_to_bottom(self, tiles: list[RuinTile], stack_size: int = 3) -> None:
+        """
+        Ajoute des tuiles au FOND du plateau, en créant de nouvelles cases
+        et en empilant les trésors par piles de `stack_size` (par défaut 3).
+
+        Les nouvelles cases sont ajoutées après la dernière case existante.
+        """
+        if not tiles:
+            return
+
+        # On crée des nouvelles cases en partant du chemin actuel
+        current_stack: list[RuinTile] = []
+
+        for tile in tiles:
+            current_stack.append(tile)
+            if len(current_stack) == stack_size:
+                space = Space(is_submarine=False, max_stack_size=stack_size)
+                for t in current_stack:
+                    space.add_ruin(t)
+                self.spaces.append(space)
+                current_stack = []
+
+        # S'il reste 1 ou 2 tuiles non empilées dans un lot complet
+        if current_stack:
+            space = Space(is_submarine=False, max_stack_size=stack_size)
+            for t in current_stack:
+                space.add_ruin(t)
+            self.spaces.append(space)
