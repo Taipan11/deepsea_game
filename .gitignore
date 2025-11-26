@@ -34,3 +34,9 @@ config.yml
 __pycache__/
 *.bak
 *.old
+
+# Ignorer l'environnement virtuel Python
+venv/
+env/    
+.venv/
+env.bak/
