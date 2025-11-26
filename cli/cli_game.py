@@ -11,15 +11,17 @@ if ROOT_DIR not in sys.path:
 from src.game import Game
 from src.player import Player
 from src.ai_player import AIPlayer
+from src.player_setup import choose_players_cli
 
 
 def main():
-    # 1 humain + 1 IA par exemple
-    players = [
-        Player(name="Mehdi"),
-        AIPlayer(name="Bot"),
-    ]
+    # # 1 humain + 1 IA par exemple
+    # players = [
+    #     Player(name="Mehdi"),
+    #     AIPlayer(name="Bot"),
+    # ]
 
+    players = choose_players_cli()    # <-- voici où le mettre
     game = Game(players, num_rounds=3, air_per_round=25)
 
     # Boucle de jeu simple ASCII
