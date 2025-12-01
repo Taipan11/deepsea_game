@@ -879,12 +879,33 @@ class GameWindow(QMainWindow):
             msg = "\n".join(f"{name}: {score}" for name, score in scores.items())
             QMessageBox.information(self, "Fin de manche", msg)
             self.game.next_round()
+        
         else:
             self.game.advance_to_next_player()
 
         self._refresh_ui()
 
-    # =========================
+
+        # # === Fin de manche ===
+        # if self.game.is_game_over():
+        #     winners = self.game.get_winners()
+        #     scores = self.game.get_final_scores()
+
+        #     msg = "Scores finaux :\n"
+        #     for p, s in scores.items():
+        #         msg += f" - {p.name}: {s}\n"
+
+        #     if len(winners) == 1:
+        #         msg += f"\n🏆 Vainqueur : {winners[0].name} !"
+        #     else:
+        #         msg += "\n🤝 Égalité entre : " + ", ".join(p.name for p in winners)
+
+        #     QMessageBox.information(self, "Fin de partie", msg)
+        #     return
+
+
+
+    # ===============
     #  Animation du dé
     # =========================
 
