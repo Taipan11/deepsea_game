@@ -706,5 +706,19 @@ class Game:
         game.board = Board.from_dict(data.get("board", {}))
 
         return game
+    
+    def get_final_scores(self):
+        """Retourne un dict {player: score} basé sur total_score."""
+        return {player: player.total_score for player in self.players}
+
+    def get_winners(self):
+        """Applique la règle officielle :
+        - vainqueur = score total le plus élevé
+        - égalités possibles
+        """
+        scores = self.get_final_scores()
+        max_score = max(scores.values())
+        return [p for p, s in scores.items() if s == max_score]
+
 
 

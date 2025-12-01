@@ -11,15 +11,17 @@ if ROOT_DIR not in sys.path:
 from src.game import Game
 from src.player import Player
 from src.ai_player import AIPlayer
+from src.player_setup import choose_players_cli
 
 
 def main():
-    # 1 humain + 1 IA par exemple
-    players = [
-        Player(name="Mehdi"),
-        AIPlayer(name="Bot"),
-    ]
+    # # 1 humain + 1 IA par exemple
+    # players = [
+    #     Player(name="Mehdi"),
+    #     AIPlayer(name="Bot"),
+    # ]
 
+    players = choose_players_cli()    # <-- voici où le mettre
     game = Game(players, num_rounds=3, air_per_round=25)
 
     # Boucle de jeu simple ASCII
@@ -81,14 +83,27 @@ def main():
 
         game.next_round()
 
-    print("\n=== Fin de partie ===")
-    for name, score in game.get_scores().items():
-        print(f"{name}: {score}")
+    # print("\n=== Fin de partie ===")
+    # for name, score in game.get_scores().items():
+    #     print(f"{name}: {score}")
+    # winners = game.get_winners()
+    # if len(winners) == 1:
+    #     print("Vainqueur :", winners[0].name)
+    # else:
+    #     print("Égalité entre :", ", ".join(p.name for p in winners))
+
+    print("\n=== FIN DE PARTIE ===")
+
+    scores = game.get_final_scores()
+    for p, s in scores.items():
+        print(f"{p.name}: {s}")
+
     winners = game.get_winners()
     if len(winners) == 1:
-        print("Vainqueur :", winners[0].name)
+        print(f"\n🏆 VAINQUEUR : {winners[0].name} !!")
     else:
-        print("Égalité entre :", ", ".join(p.name for p in winners))
+        print("\n🤝 ÉGALITÉ ENTRE :", ", ".join(p.name for p in winners))
+
 
 
 if __name__ == "__main__":
