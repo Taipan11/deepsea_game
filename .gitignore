@@ -34,3 +34,18 @@ config.yml
 __pycache__/
 *.bak
 *.old
+
+# Ignorer les dossiers de build
+build/
+dist/
+target/
+out/
+# Ignorer les fichiers de test
+coverage/
+*.lcov  
+test-results/
+.nyc_output/
+# Ignorer le venv Python
+venv/
+env/
+ENV/    
