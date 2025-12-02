@@ -123,6 +123,26 @@ class Space:
         self.ruins.clear()
         return tiles
 
+    def pop_all_ruins_as_single(self) -> Optional[RuinTile]:
+        """
+        Retire toutes les tuiles de cette case et les combine
+        en un seul RuinTile dont la valeur est la somme.
+
+        On choisit comme niveau le niveau maximal des tuiles.
+        """
+        if not self.has_ruin:
+            return None
+
+        # On récupère toutes les tuiles présentes
+        tiles = list(self.ruins)
+        self.ruins.clear()
+
+        total_value = sum(t.value for t in tiles)
+        max_level = max(t.level for t in tiles)
+
+        return RuinTile(level=max_level, value=total_value)
+
+
     # --------- Représentation ---------
 
     def __str__(self) -> str:
@@ -158,6 +178,7 @@ class Space:
             f"max_stack_size={self.max_stack_size})"
         )
 
+    
     # --------- Sérialisation ---------
 
     def to_dict(self) -> Dict[str, Any]:

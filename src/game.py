@@ -363,7 +363,8 @@ class Game:
             if not space.has_ruin:
                 return None
 
-            tile = space.pop_ruin()
+            #  nouvelle méthode : récupère un seul RuinTile combiné
+            tile = space.pop_all_ruins_as_single()
             if tile is not None:
                 player.take_ruin(tile)
 
@@ -707,18 +708,10 @@ class Game:
 
         return game
     
-    def get_final_scores(self):
-        """Retourne un dict {player: score} basé sur total_score."""
-        return {player: player.total_score for player in self.players}
 
-    def get_winners(self):
-        """Applique la règle officielle :
-        - vainqueur = score total le plus élevé
-        - égalités possibles
-        """
-        scores = self.get_final_scores()
-        max_score = max(scores.values())
-        return [p for p, s in scores.items() if s == max_score]
+
+
+    
 
 
 

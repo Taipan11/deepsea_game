@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QGraphicsOpacityEffect,
     QSpinBox,
+    QDialog
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from typing import Optional, List
+
 
 # Rendre src importable (comme dans cli_game.py)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +35,7 @@ from src.game import Game
 from src.player import Player
 from src.ai_player import AIPlayer
 from .board_widget import BoardWidget
-
+from .end_game_dialog import EndGameDialog
 
 class SetupWindow(QMainWindow):
     def __init__(self):
@@ -752,6 +754,8 @@ class GameWindow(QMainWindow):
         #  Direction (UI) – lecture de l’état du moteur
         # =========================
         if not p.is_ai:
+            last_index = self.game.board.last_index
+
             if p.is_on_submarine and not p.has_returned:
                 # Début de manche : obligé de descendre (logique métier dans Game.begin_turn,
                 # mais on reflète visuellement ici)
@@ -770,12 +774,21 @@ class GameWindow(QMainWindow):
                 self.radio_go_back.setChecked(True)
 
             else:
-                # En pleine descente : choix libre visuellement
-                self.radio_descend.setEnabled(True)
-                self.radio_go_back.setEnabled(True)
+                # En descente
+                if p.position >= last_index:
+                    # 👉 Sur la dernière case : impossible de continuer à descendre
+                    self.radio_descend.setEnabled(False)
+                    self.radio_go_back.setEnabled(True)
 
-                if not self.radio_go_back.isChecked():
-                    self.radio_descend.setChecked(True)
+                    self.radio_descend.setChecked(False)
+                    self.radio_go_back.setChecked(True)
+                else:
+                    # Cases "normales" : choix libre
+                    self.radio_descend.setEnabled(True)
+                    self.radio_go_back.setEnabled(True)
+
+                    if not self.radio_go_back.isChecked():
+                        self.radio_descend.setChecked(True)
         else:
             # IA : on met juste l'état visuel cohérent
             self.radio_descend.setChecked(not p.going_back)
@@ -871,67 +884,66 @@ class GameWindow(QMainWindow):
                         "Vous avez posé un trésor sur cette case pour vous alléger."
                     )
 
-
         # --- Fin de manche ? ---
         if self.game.is_round_over():
             self.game.end_round()
             scores = self.game.get_scores()
             msg = "\n".join(f"{name}: {score}" for name, score in scores.items())
             QMessageBox.information(self, "Fin de manche", msg)
+
             self.game.next_round()
-        
+
+            if self.game.is_game_over():
+                self._show_end_of_game_dialog()
+                return
         else:
             self.game.advance_to_next_player()
 
         self._refresh_ui()
 
 
-        # # === Fin de manche ===
-        # if self.game.is_game_over():
-        #     winners = self.game.get_winners()
-        #     scores = self.game.get_final_scores()
+    def _show_end_of_game_dialog(self):
 
-        #     msg = "Scores finaux :\n"
-        #     for p, s in scores.items():
-        #         msg += f" - {p.name}: {s}\n"
+        winners = self.game.get_winners() # List[Player]
+        scores = self.game.get_scores() # Dict[str, int]
 
-        #     if len(winners) == 1:
-        #         msg += f"\n🏆 Vainqueur : {winners[0].name} !"
-        #     else:
-        #         msg += "\n🤝 Égalité entre : " + ", ".join(p.name for p in winners)
+        dialog = EndGameDialog(scores, winners, parent=self)
+        result = dialog.exec()
 
-        #     QMessageBox.information(self, "Fin de partie", msg)
-        #     return
+        # Si l'utilisateur a cliqué sur "Rejouer"
+        if result == QDialog.Accepted:
+            # Ouvrir une nouvelle fenêtre de setup
+            self.new_setup = SetupWindow()
+            self.new_setup.show()
 
-
+        # Dans tous les cas, on ferme la fenêtre de jeu actuelle
+        self.close()
 
     # ===============
     #  Animation du dé
     # =========================
 
     def _init_dice_animation(self):
-        # Label centré qui affichera le résultat du dé (ex : "🎲 4")
         self.dice_label = QLabel(self)
         self.dice_label.setObjectName("DiceLabel")
         self.dice_label.setAlignment(Qt.AlignCenter)
         self.dice_label.hide()
 
-        # Effet de transparence
         self.dice_opacity_effect = QGraphicsOpacityEffect(self.dice_label)
         self.dice_label.setGraphicsEffect(self.dice_opacity_effect)
 
-        # Animation d'opacité (fade in/out)
         self.dice_opacity_anim = QPropertyAnimation(
             self.dice_opacity_effect,
             b"opacity",
             self
         )
-        self.dice_opacity_anim.setDuration(800)  # 0.8s
+        self.dice_opacity_anim.setDuration(1000)  # vitesse augmentée
         self.dice_opacity_anim.setStartValue(0.0)
-        self.dice_opacity_anim.setKeyValueAt(0.2, 1.0)  # monte vite à 1
+        self.dice_opacity_anim.setKeyValueAt(0.55, 1.0)
         self.dice_opacity_anim.setEndValue(0.0)
-        self.dice_opacity_anim.setEasingCurve(QEasingCurve.OutQuad)
+        self.dice_opacity_anim.setEasingCurve(QEasingCurve.OutCubic)
         self.dice_opacity_anim.finished.connect(self.dice_label.hide)
+
 
     def show_dice_animation(self, dice_value: int):
         # Texte du dé
@@ -956,3 +968,6 @@ if __name__ == "__main__":
     setup = SetupWindow()
     setup.show()
     sys.exit(app.exec())
+
+
+    
