@@ -29,7 +29,7 @@ class EndGameDialog(QDialog):
 
 
         if len(winners) == 1:
-            text += f"\n🏆 Vainqueur : {winners[0].name} !"
+            text += f"\n🏆 Vainqueur : {winners[0].name} a gagné la partie !"
         else:
             text += "\n🤝 Égalité entre : " + ", ".join(p.name for p in winners)
 

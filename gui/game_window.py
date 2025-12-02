@@ -924,7 +924,7 @@ class GameWindow(QMainWindow):
         )
         self.dice_opacity_anim.setDuration(1000)  # vitesse augmentée
         self.dice_opacity_anim.setStartValue(0.0)
-        self.dice_opacity_anim.setKeyValueAt(0.55, 1.0)
+        self.dice_opacity_anim.setKeyValueAt(0.999, 1.0)
         self.dice_opacity_anim.setEndValue(0.0)
         self.dice_opacity_anim.setEasingCurve(QEasingCurve.OutCubic)
         self.dice_opacity_anim.finished.connect(self.dice_label.hide)
