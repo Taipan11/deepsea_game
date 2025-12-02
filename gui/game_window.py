@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QGraphicsOpacityEffect,
     QSpinBox,
-    QDialog
+    QDialog,
+    QComboBox,
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from typing import Optional, List
@@ -33,7 +34,7 @@ if ROOT_DIR not in sys.path:
 
 from src.game import Game
 from src.player import Player
-from src.ai_player import AIPlayer
+from src.ai_player import AIPlayer, AIPlayerNormal, AIPlayerCautious, AIPlayerAdventurous
 from .board_widget import BoardWidget
 from .end_game_dialog import EndGameDialog
 
@@ -63,25 +64,6 @@ class SetupWindow(QMainWindow):
         main_layout.addWidget(title)
         main_layout.addWidget(subtitle)
 
-        # GroupBox mode de jeu
-        mode_group = QGroupBox("Mode de jeu")
-        mode_layout = QVBoxLayout()
-        mode_group.setLayout(mode_layout)
-
-        self.radio_pvp = QRadioButton("Joueur vs Joueur")
-        self.radio_pvai = QRadioButton("Joueur vs IA")
-        self.radio_pvai.setChecked(True)
-
-        self.mode_button_group = QButtonGroup(self)
-        self.mode_button_group.addButton(self.radio_pvp)
-        self.mode_button_group.addButton(self.radio_pvai)
-
-        mode_layout.addWidget(self.radio_pvp)
-        mode_layout.addWidget(self.radio_pvai)
-
-        main_layout.addWidget(mode_group)
-
-        # GroupBox joueurs
         # Sélection du nombre de joueurs (2 à 6)
         self.spin_player_count = QSpinBox()
         self.spin_player_count.setRange(2, 6)
@@ -98,25 +80,6 @@ class SetupWindow(QMainWindow):
         # players_group.setLayout(players_layout)
         self.players_layout = QVBoxLayout()   # <--- remplace l'ancien players_layout
         players_group.setLayout(self.players_layout)
-
-
-        # # Joueur 1
-        # row1 = QHBoxLayout()
-        # label_p1 = QLabel("Joueur 1 :")
-        # self.input_player1 = QLineEdit()
-        # self.input_player1.setPlaceholderText("Nom du joueur 1 (humain)")
-        # row1.addWidget(label_p1)
-        # row1.addWidget(self.input_player1)
-        # self.players_layout.addLayout(row1)
-
-        # # Joueur 2
-        # row2 = QHBoxLayout()
-        # self.label_p2 = QLabel("Joueur 2 :")
-        # self.input_player2 = QLineEdit()
-        # self.input_player2.setPlaceholderText("Bot")
-        # row2.addWidget(self.label_p2)
-        # row2.addWidget(self.input_player2)
-        # self.players_layout.addLayout(row2)
 
         self.player_rows = []  # chaque entrée = dict pour un joueur
 
@@ -138,12 +101,23 @@ class SetupWindow(QMainWindow):
         # self.radio_pvp.toggled.connect(self._on_mode_changed)
         # self._on_mode_changed()  # initialisation texte joueur 2
 
+    
     def _rebuild_player_rows(self):
-        # supprimer anciens widgets
+        # 1) Sauvegarder l'état actuel des lignes (avant de tout supprimer)
+        old_states = []
         for row in self.player_rows:
+            name = row["name_input"].text()
+            is_ai = row["role_ai"].isChecked()
+            ai_level = row["combo_ai_level"].currentText()
+            old_states.append({
+                "name": name,
+                "is_ai": is_ai,
+                "ai_level": ai_level,
+            })
             row["widget"].deleteLater()
         self.player_rows.clear()
 
+        # 2) Recréer les lignes en réinjectant l'état si possible
         count = self.spin_player_count.value()
 
         for i in range(count):
@@ -157,36 +131,57 @@ class SetupWindow(QMainWindow):
 
             role_human = QRadioButton("Humain")
             role_ai = QRadioButton("IA")
-            role_human.setChecked(True)
 
             group = QButtonGroup(widget)
             group.addButton(role_human)
             group.addButton(role_ai)
 
+            combo_ai_level = QComboBox()
+            combo_ai_level.addItems(["Normal", "Prudent", "Aventureux"])
+            combo_ai_level.setEnabled(False)
+
+            def on_role_changed():
+                combo_ai_level.setEnabled(role_ai.isChecked())
+
+            role_human.toggled.connect(on_role_changed)
+            role_ai.toggled.connect(on_role_changed)
+
             layout.addWidget(label)
             layout.addWidget(input_name)
             layout.addWidget(role_human)
             layout.addWidget(role_ai)
+            layout.addWidget(combo_ai_level)
 
             self.players_layout.addWidget(widget)
+
+            # 🔁 Réappliquer l'ancien état si on en a un pour cet index
+            if i < len(old_states):
+                state = old_states[i]
+
+                # Nom
+                if state["name"]:
+                    input_name.setText(state["name"])
+
+                # Humain / IA
+                if state["is_ai"]:
+                    role_ai.setChecked(True)
+                    combo_ai_level.setEnabled(True)
+                    combo_ai_level.setCurrentText(state["ai_level"])
+                else:
+                    role_human.setChecked(True)
+                    combo_ai_level.setEnabled(False)
+            else:
+                # Nouveau joueur (au-delà de l'ancien count) : par défaut humain
+                role_human.setChecked(True)
+                combo_ai_level.setEnabled(False)
 
             self.player_rows.append({
                 "widget": widget,
                 "name_input": input_name,
                 "role_human": role_human,
                 "role_ai": role_ai,
+                "combo_ai_level": combo_ai_level,
             })
-
-
-    # def _on_mode_changed(self):
-    #     if self.radio_pvp.isChecked():
-    #         self.label_p2.setText("Joueur 2 :")
-    #         self.input_player2.setPlaceholderText("Nom du joueur 2 (humain)")
-    #     else:
-    #         self.label_p2.setText("Adversaire IA :")
-    #         self.input_player2.setPlaceholderText("Nom du bot (ex : Kraken)")
-    #         if not self.input_player2.text():
-    #             self.input_player2.setText("Bot")
 
     def _apply_styles(self):
         self.setStyleSheet("""
@@ -259,40 +254,30 @@ class SetupWindow(QMainWindow):
         """)
 
     def on_start_clicked(self):
-        # name1 = self.input_player1.text().strip() or "Joueur 1"
-        # name2 = self.input_player2.text().strip()
+        players: List[Player] = []
 
-        # if self.radio_pvp.isChecked():
-        #     if not name2:
-        #         name2 = "Joueur 2"
-        #     players: List[Player] = [
-        #         Player(name=name1),
-        #         Player(name=name2),
-        #     ]
-        # else:
-        #     if not name2:
-        #         name2 = "Bot"
-        #     players = [
-        #         Player(name=name1),
-        #         AIPlayer(name=name2),
-        #     ]
-
-        players = []
         for row in self.player_rows:
             name = row["name_input"].text().strip()
             if not name:
                 name = f"Joueur {len(players)+1}"
 
             if row["role_ai"].isChecked():
-                players.append(AIPlayer(name=name))
+                level = row["combo_ai_level"].currentText()
+
+                if level == "Normal":
+                    players.append(AIPlayerNormal(name=name))
+                elif level == "Prudent":
+                    players.append(AIPlayerCautious(name=name))
+                elif level == "Aventureux":
+                    players.append(AIPlayerAdventurous(name=name))
             else:
                 players.append(Player(name=name))
-
 
         # Créer et afficher la fenêtre de jeu
         self.game_window = GameWindow(players=players)
         self.game_window.show()
         self.close()
+
 
 
 class GameWindow(QMainWindow):
@@ -305,7 +290,7 @@ class GameWindow(QMainWindow):
         if players is None:
             players = [
                 Player(name="Mehdi"),
-                AIPlayer(name="Bot"),
+                AIPlayerNormal(name="Bot"),
             ]
 
         # Le Game est l’unique source de vérité du state
