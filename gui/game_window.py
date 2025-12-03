@@ -24,8 +24,7 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from typing import Optional, List
-
+from typing import Optional, List, Callable
 
 # Rendre src importable (comme dans cli_game.py)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,255 +33,24 @@ if ROOT_DIR not in sys.path:
 
 from src.game import Game
 from src.player import Player
-from src.ai_player import AIPlayer, AIPlayerNormal, AIPlayerCautious, AIPlayerAdventurous
+from src.ai_player import AIPlayer, AIPlayerNormal
 from .board_widget import BoardWidget
 from .end_game_dialog import EndGameDialog
-
-class SetupWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Deep Sea Adventure – Nouvelle partie")
-        self.setMinimumSize(600, 400)
-
-        self._build_ui()
-        self._apply_styles()
-
-    def _build_ui(self):
-        main_widget = QWidget()
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(16)
-        main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
-
-        # Titre
-        title = QLabel("Deep Sea Adventure 🐙")
-        title.setObjectName("SetupTitle")
-        subtitle = QLabel("Configure ta nouvelle partie")
-        subtitle.setObjectName("SetupSubtitle")
-
-        main_layout.addWidget(title)
-        main_layout.addWidget(subtitle)
-
-        # Sélection du nombre de joueurs (2 à 6)
-        self.spin_player_count = QSpinBox()
-        self.spin_player_count.setRange(2, 6)
-        self.spin_player_count.setValue(2)
-
-        row_count = QHBoxLayout()
-        row_count.addWidget(QLabel("Nombre de joueurs :"))
-        row_count.addWidget(self.spin_player_count)
-
-        main_layout.addLayout(row_count)
-
-        players_group = QGroupBox("Joueurs")
-        # players_layout = QVBoxLayout()
-        # players_group.setLayout(players_layout)
-        self.players_layout = QVBoxLayout()   # <--- remplace l'ancien players_layout
-        players_group.setLayout(self.players_layout)
-
-        self.player_rows = []  # chaque entrée = dict pour un joueur
-
-        self._rebuild_player_rows()
-        self.spin_player_count.valueChanged.connect(self._rebuild_player_rows)
-
-
-        main_layout.addWidget(players_group)
-
-        # Bouton lancer
-        self.start_button = QPushButton("🚀 Lancer la partie")
-        self.start_button.setObjectName("StartButton")
-        self.start_button.clicked.connect(self.on_start_clicked)
-
-        main_layout.addStretch()
-        main_layout.addWidget(self.start_button)
-
-        # # Réagit au changement de mode
-        # self.radio_pvp.toggled.connect(self._on_mode_changed)
-        # self._on_mode_changed()  # initialisation texte joueur 2
-
-    
-    def _rebuild_player_rows(self):
-        # 1) Sauvegarder l'état actuel des lignes (avant de tout supprimer)
-        old_states = []
-        for row in self.player_rows:
-            name = row["name_input"].text()
-            is_ai = row["role_ai"].isChecked()
-            ai_level = row["combo_ai_level"].currentText()
-            old_states.append({
-                "name": name,
-                "is_ai": is_ai,
-                "ai_level": ai_level,
-            })
-            row["widget"].deleteLater()
-        self.player_rows.clear()
-
-        # 2) Recréer les lignes en réinjectant l'état si possible
-        count = self.spin_player_count.value()
-
-        for i in range(count):
-            widget = QWidget()
-            layout = QHBoxLayout()
-            widget.setLayout(layout)
-
-            label = QLabel(f"Joueur {i+1} :")
-            input_name = QLineEdit()
-            input_name.setPlaceholderText(f"Nom du joueur {i+1}")
-
-            role_human = QRadioButton("Humain")
-            role_ai = QRadioButton("IA")
-
-            group = QButtonGroup(widget)
-            group.addButton(role_human)
-            group.addButton(role_ai)
-
-            combo_ai_level = QComboBox()
-            combo_ai_level.addItems(["Normal", "Prudent", "Aventureux"])
-            combo_ai_level.setEnabled(False)
-
-            def on_role_changed():
-                combo_ai_level.setEnabled(role_ai.isChecked())
-
-            role_human.toggled.connect(on_role_changed)
-            role_ai.toggled.connect(on_role_changed)
-
-            layout.addWidget(label)
-            layout.addWidget(input_name)
-            layout.addWidget(role_human)
-            layout.addWidget(role_ai)
-            layout.addWidget(combo_ai_level)
-
-            self.players_layout.addWidget(widget)
-
-            # 🔁 Réappliquer l'ancien état si on en a un pour cet index
-            if i < len(old_states):
-                state = old_states[i]
-
-                # Nom
-                if state["name"]:
-                    input_name.setText(state["name"])
-
-                # Humain / IA
-                if state["is_ai"]:
-                    role_ai.setChecked(True)
-                    combo_ai_level.setEnabled(True)
-                    combo_ai_level.setCurrentText(state["ai_level"])
-                else:
-                    role_human.setChecked(True)
-                    combo_ai_level.setEnabled(False)
-            else:
-                # Nouveau joueur (au-delà de l'ancien count) : par défaut humain
-                role_human.setChecked(True)
-                combo_ai_level.setEnabled(False)
-
-            self.player_rows.append({
-                "widget": widget,
-                "name_input": input_name,
-                "role_human": role_human,
-                "role_ai": role_ai,
-                "combo_ai_level": combo_ai_level,
-            })
-
-    def _apply_styles(self):
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #020617;
-            }
-
-            QLabel#SetupTitle {
-                font-size: 24px;
-                font-weight: 800;
-                color: #e5e7eb;
-            }
-
-            QLabel#SetupSubtitle {
-                font-size: 13px;
-                color: #9ca3af;
-                margin-bottom: 8px;
-            }
-
-            QGroupBox {
-                border: 1px solid #1f2937;
-                border-radius: 10px;
-                margin-top: 12px;
-                background-color: #020617;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 8px;
-                margin-left: 6px;
-                color: #9ca3af;
-                font-size: 12px;
-                font-weight: 600;
-            }
-
-            QLabel {
-                color: #e5e7eb;
-                font-size: 12px;
-            }
-
-            QLineEdit {
-                background-color: #020617;
-                border-radius: 6px;
-                border: 1px solid #111827;
-                color: #e5e7eb;
-                padding: 6px 8px;
-                font-size: 12px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #38bdf8;
-            }
-
-            QRadioButton {
-                color: #e5e7eb;
-                font-size: 12px;
-            }
-
-            QPushButton#StartButton {
-                background-color: #22c55e;
-                color: #020617;
-                border-radius: 10px;
-                font-size: 14px;
-                font-weight: 700;
-                padding: 10px 16px;
-                border: none;
-            }
-            QPushButton#StartButton:hover {
-                background-color: #16a34a;
-            }
-        """)
-
-    def on_start_clicked(self):
-        players: List[Player] = []
-
-        for row in self.player_rows:
-            name = row["name_input"].text().strip()
-            if not name:
-                name = f"Joueur {len(players)+1}"
-
-            if row["role_ai"].isChecked():
-                level = row["combo_ai_level"].currentText()
-
-                if level == "Normal":
-                    players.append(AIPlayerNormal(name=name))
-                elif level == "Prudent":
-                    players.append(AIPlayerCautious(name=name))
-                elif level == "Aventureux":
-                    players.append(AIPlayerAdventurous(name=name))
-            else:
-                players.append(Player(name=name))
-
-        # Créer et afficher la fenêtre de jeu
-        self.game_window = GameWindow(players=players)
-        self.game_window.show()
-        self.close()
-
-
+from .style_utils import load_styles
 
 class GameWindow(QMainWindow):
-    def __init__(self, players: Optional[List[Player]] = None):
-        super().__init__()
+    def __init__(
+            self, 
+            players: Optional[List[Player]] = None,
+            on_request_new_game: Optional[Callable[[], None]] = None,
+            parent=None,
+        ):
+        """
+        on_request_new_game() : callback appelé quand on clique sur "Rejouer" dans la boîte de fin
+        """
+        super().__init__(parent)
+        self.on_request_new_game = on_request_new_game
+
         self.setWindowTitle("Deep Sea Adventure 🐙")
         self.setMinimumSize(1100, 650)
 
@@ -298,10 +66,12 @@ class GameWindow(QMainWindow):
         self.board_widget = BoardWidget(self.game.board, self.game.players)
 
         # --- UI ---
+         # --- UI ---
         self._build_ui()
-        self._apply_styles()
+        load_styles(self)      
         self._init_dice_animation()
         self._refresh_ui()
+
 
     # =========================
     #  Construction UI
@@ -510,135 +280,7 @@ class GameWindow(QMainWindow):
         footer.setObjectName("FooterLabel")
         footer.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         main_layout.addWidget(footer)
-
-    # =========================
-    #  Style moderne (QSS)
-    # =========================
-
-    def _apply_styles(self):
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #0f172a; /* bleu nuit */
-            }
-
-            QLabel#GameTitle {
-                font-size: 22px;
-                font-weight: 700;
-                color: #e5e7eb;
-            }
-
-            QLabel#BadgeRound,
-            QLabel#BadgeAir {
-                padding: 4px 10px;
-                border-radius: 999px;
-                font-size: 12px;
-                font-weight: 600;
-                color: #0f172a;
-                background-color: #38bdf8;
-            }
-
-            QLabel#BadgeAir {
-                background-color: #22c55e;
-            }
-
-            QGroupBox {
-                border: 1px solid #1f2937;
-                border-radius: 10px;
-                margin-top: 8px;
-                background-color: #020617;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 4px 8px;
-                margin-left: 6px;
-                color: #9ca3af;
-                font-size: 12px;
-                font-weight: 600;
-            }
-
-            QTextEdit#PlayersText {
-                background-color: #020617;
-                border-radius: 8px;
-                border: 1px solid #111827;
-                color: #e5e7eb;
-                font-family: "JetBrains Mono", "Consolas", monospace;
-                font-size: 12px;
-            }
-
-            QLabel#CurrentPlayerLabel {
-                font-size: 14px;
-                font-weight: 600;
-                color: #e5e7eb;
-            }
-
-            QLabel#HintLabel {
-                font-size: 11px;
-                color: #9ca3af;
-            }
-
-            QLabel#FooterLabel {
-                font-size: 11px;
-                color: #6b7280;
-            }
-
-            QPushButton#PlayButton {
-                background-color: #38bdf8;
-                color: #020617;
-                border-radius: 10px;
-                font-size: 14px;
-                font-weight: 700;
-                padding: 8px 16px;
-                border: none;
-            }
-            QPushButton#PlayButton:hover {
-                background-color: #0ea5e9;
-            }
-            QPushButton#PlayButton:disabled {
-                background-color: #1e293b;
-                color: #4b5563;
-            }
-
-            QRadioButton {
-                color: #e5e7eb;
-                font-size: 12px;
-            }
-
-            QSplitter::handle {
-                background-color: #020617;
-            }
-            QFrame#PlayerCard {
-                background-color: #020617;
-                border-radius: 8px;
-                border: 1px solid #111827;
-            }
-
-            QLabel#PlayerNameLabel {
-                font-size: 13px;
-                font-weight: 700;
-                color: #e5e7eb;
-            }
-
-            QLabel#PlayerRoleLabel {
-                font-size: 11px;
-                color: #9ca3af;
-            }
-
-            QLabel#PlayerInfoLabel {
-                font-size: 11px;
-                color: #d1d5db;
-            }
-            QLabel#DiceLabel {
-                background-color: rgba(15, 23, 42, 220);
-                border-radius: 14px;
-                border: 1px solid #38bdf8;
-                padding: 12px 20px;
-                color: #f9fafb;
-                font-size: 26px;
-                font-weight: 800;
-            }
-        """)
-
+    
     # =========================
     #  Mise à jour UI
     # =========================
@@ -897,9 +539,9 @@ class GameWindow(QMainWindow):
 
         # Si l'utilisateur a cliqué sur "Rejouer"
         if result == QDialog.Accepted:
-            # Ouvrir une nouvelle fenêtre de setup
-            self.new_setup = SetupWindow()
-            self.new_setup.show()
+            # On appelle simplement le callback fourni par main.py
+            if self.on_request_new_game is not None:
+                self.on_request_new_game()
 
         # Dans tous les cas, on ferme la fenêtre de jeu actuelle
         self.close()
@@ -947,12 +589,3 @@ class GameWindow(QMainWindow):
         self.dice_opacity_anim.stop()
         self.dice_opacity_anim.start()
 
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    setup = SetupWindow()
-    setup.show()
-    sys.exit(app.exec())
-
-
-    

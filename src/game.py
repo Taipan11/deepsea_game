@@ -98,6 +98,7 @@ class GameState:
     is_round_over: bool
     is_game_over: bool
     board: Dict[str, Any]
+    space: List[SpaceState]
     players: List[PlayerState]
     last_turn: Optional[TurnResult] = None
 

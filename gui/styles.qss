@@ -1,0 +1,218 @@
+/* --- Styles SetupWindow --- */
+
+QMainWindow {
+    background-color: #020617;
+}
+
+QLabel#SetupTitle {
+    font-size: 24px;
+    font-weight: 800;
+    color: #e5e7eb;
+}
+
+QLabel#SetupSubtitle {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 8px;
+}
+
+QGroupBox {
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    margin-top: 12px;
+    background-color: #020617;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 4px 8px;
+    margin-left: 6px;
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLabel {
+    color: #e5e7eb;
+    font-size: 12px;
+}
+
+QLineEdit {
+    background-color: #020617;
+    border-radius: 6px;
+    border: 1px solid #111827;
+    color: #e5e7eb;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+QLineEdit:focus {
+    border: 1px solid #38bdf8;
+}
+
+QRadioButton {
+    color: #e5e7eb;
+    font-size: 12px;
+}
+
+QPushButton#StartButton {
+    background-color: #22c55e;
+    color: #020617;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 16px;
+    border: none;
+}
+QPushButton#StartButton:hover {
+    background-color: #16a34a;
+}
+
+/* --- Styles GameWindow --- */
+
+QLabel#GameTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+QLabel#BadgeRound,
+QLabel#BadgeAir {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    background-color: #38bdf8;
+}
+
+QLabel#BadgeAir {
+    background-color: #22c55e;
+}
+
+QTextEdit#PlayersText {
+    background-color: #020617;
+    border-radius: 8px;
+    border: 1px solid #111827;
+    color: #e5e7eb;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 12px;
+}
+
+QLabel#CurrentPlayerLabel {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+QLabel#HintLabel {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+QLabel#FooterLabel {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+QPushButton#PlayButton {
+    background-color: #38bdf8;
+    color: #020617;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border: none;
+}
+QPushButton#PlayButton:hover {
+    background-color: #0ea5e9;
+}
+QPushButton#PlayButton:disabled {
+    background-color: #1e293b;
+    color: #4b5563;
+}
+
+QSplitter::handle {
+    background-color: #020617;
+}
+
+QFrame#PlayerCard {
+    background-color: #020617;
+    border-radius: 8px;
+    border: 1px solid #111827;
+}
+
+QLabel#PlayerNameLabel {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+QLabel#PlayerRoleLabel {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+QLabel#PlayerInfoLabel {
+    font-size: 11px;
+    color: #d1d5db;
+}
+
+QLabel#DiceLabel {
+    background-color: rgba(15, 23, 42, 220);
+    border-radius: 14px;
+    border: 1px solid #38bdf8;
+    padding: 12px 20px;
+    color: #f9fafb;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+
+/* =========================
+   EndGameDialog
+========================= */
+
+QDialog#EndGameDialog {
+    background-color: #020617;
+}
+
+QLabel#EndGameTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+QLabel#EndGameScores {
+    color: #e5e7eb;
+    font-size: 12px;
+}
+
+/* On peut réutiliser le style général des boutons,
+   ou être plus spécifique si tu veux un style différent ici. */
+
+QPushButton#EndGameReplayButton,
+QPushButton#EndGameQuitButton {
+    background-color: #38bdf8;
+    color: #020617;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 600;
+}
+
+QPushButton#EndGameReplayButton:hover,
+QPushButton#EndGameQuitButton:hover {
+    background-color: #0ea5e9;
+}
+
+/* =========================
+   Boîtes de message Qt
+   ========================= */
+
+QMessageBox {
+    background-color: #020617;
+}
+
+QMessageBox QLabel {
+    color: #e5e7eb;
+    font-size: 12px;
+}
