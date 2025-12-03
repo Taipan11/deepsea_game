@@ -272,17 +272,17 @@ def main():
     # Fin de partie
     clear_screen()
     print("=== Fin de la partie 🏁 ===")
-    final_scores = game.get_final_scores()
+    final_scores = game.get_scores()
     winners = game.get_winners()
 
     print("\nScores finaux :")
     for p, score in final_scores.items():
-        print(f"- {p.name} : {score} points")
+        print(f" - {p}: {score}")
 
     if len(winners) == 1:
-        print(f"\n🏆 Vainqueur : {winners[0].name} !")
+        print(f"\n🏆 Vainqueur : {winners[0]} !")
     else:
-        names = ", ".join(p.name for p in winners)
+        names = ", ".join(str(p) for p in winners)
         print(f"\n🤝 Égalité entre : {names}")
 
     print("\nMerci d'avoir joué à Deep Sea Adventure (version ASCII) 🐙")

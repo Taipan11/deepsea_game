@@ -98,6 +98,7 @@ class GameState:
     is_round_over: bool
     is_game_over: bool
     board: Dict[str, Any]
+    spaces: List[SpaceState] # NEW
     players: List[PlayerState]
     last_turn: Optional[TurnResult] = None
 
@@ -565,7 +566,7 @@ class Game:
             is_round_over=self.is_round_over(),
             is_game_over=self.is_game_over(),
             board=self.board.to_dict(),
-            spaces=spaces_state,          # 👈 NEW
+            # spaces=spaces_state,          # 👈 NEW
             players=players_state,
             last_turn=self._last_turn,
         )
@@ -707,11 +708,3 @@ class Game:
         game.board = Board.from_dict(data.get("board", {}))
 
         return game
-    
-
-
-
-    
-
-
-
