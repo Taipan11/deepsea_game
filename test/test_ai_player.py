@@ -1,6 +1,4 @@
-# tests/test_ai_player.py
-import pytest
-
+# filepath: test/test_ai_player.py
 from src.ai_player import (
     AIPlayer,
     AIPlayerNormal,
