@@ -100,6 +100,13 @@ https://regle.escaleajeux.fr/deeps_rg.pdf
 
 Projet réalisé dans le cadre d’un module de Programmation Orientée Objet (Master Data Science).
 
+== Authors
+
+- DANIELE ISABELLE Nana Fotzeu  
+- GEORGES Jean Constantin Bernard  
+- KHAMASSI Mehdi  
+- WADE Abdou (https://github.com/abdouwade1996)
+
 ---
 
 ## 💡 Ce que j’ai appris
