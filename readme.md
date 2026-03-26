@@ -105,11 +105,11 @@ Projet réalisé dans le cadre d’un module de Programmation Orientée Objet (M
 - DANIELE ISABELLE Nana Fotzeu  
 - GEORGES Jean Constantin Bernard  
 - KHAMASSI Mehdi  
-- WADE Abdou (https://github.com/abdouwade1996)
+- WADE Abdou
 
 ---
 
-## 💡 Ce que j’ai appris
+## 💡 Ce qu'on a appris
 
 - Concevoir une architecture orientée objet robuste
 - Gérer la complexité d’un système à états multiples
